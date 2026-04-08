@@ -1,0 +1,32 @@
+# 每个交易对独立配置：时间窗口（分钟）和涨跌幅阈值（%）
+symbols:
+  - symbol: BTCUSDT
+    window_minutes: 15
+    threshold_pct: 2.0
+  - symbol: ETHUSDT
+    window_minutes: 5
+    threshold_pct: 3.0
+  - symbol: SOLUSDT
+    window_minutes: 5
+    threshold_pct: 5.0
+  - symbol: BNBUSDT
+    window_minutes: 10
+    threshold_pct: 3.0
+
+# 全局监控设置
+monitor:
+  poll_interval_seconds: 30   # 轮询间隔（秒）
+
+# 告警设置
+alert:
+  cooldown_minutes: 10        # 同一交易对告警冷却时间（分钟）
+
+# 飞书机器人 Webhook
+feishu:
+  webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-id-here"
+  secret: ""                  # 可选：签名密钥，留空则不签名
+
+# 币安 API（可选覆盖）
+binance:
+  base_url: "https://api.binance.com"
+  timeout_seconds: 10

@@ -1,0 +1,16 @@
+# Binaries
+crypto-price-alert
+crypto-price-alert.exe
+
+# Config with real secrets
+config.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
