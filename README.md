@@ -2,12 +2,13 @@
 
 ## 1. 项目简介
 
-本服务定时轮询币安（Binance）K 线数据，监控指定交易对在配置的时间窗口内的价格变化。当涨跌幅达到阈值时，通过飞书群机器人 Webhook 发送交互卡片告警。
+本服务定时轮询币安（Binance）行情数据，监控指定交易对在配置时间窗口内的价格变化。当涨跌幅达到阈值时，通过飞书群机器人 Webhook 发送交互卡片告警。
 
 **核心特性：**
-- 每个交易对独立配置监控时间窗口和涨跌幅阈值
-- 飞书交互卡片通知，涨绿跌红，附带 Binance 交易链接
-- 同一交易对告警冷却去重，避免重复打扰
+- 同时支持 Binance 现货价格监控与 USDⓈ-M 永续 `mark price` 监控
+- 每个监控项独立配置市场类型、价格来源、时间窗口和涨跌幅阈值
+- 飞书交互卡片通知，明确标识「现货 / 永续-Mark」，并附带对应 Binance 链接
+- 同一监控项告警冷却去重，避免重复打扰
 - 支持 HTTP 代理访问币安 API
 
 ---
@@ -17,7 +18,7 @@
 | 依赖 | 版本要求 | 说明 |
 |------|---------|------|
 | Go   | >= 1.22 | 编译项目（运行编译好的 exe 不需要） |
-| 网络 | 能访问 api.binance.com | 国内需要配置 HTTP 代理 |
+| 网络 | 能访问 `api.binance.com` / `fapi.binance.com` | 国内通常需要配置 HTTP 代理 |
 | 飞书 | 群机器人 Webhook URL | 在飞书群设置中添加自定义机器人获取 |
 
 ---
@@ -68,23 +69,31 @@ cp config.example.yaml config.yaml
 
 ```yaml
 # ==================== 交易对配置 ====================
-# 每个交易对独立设置：交易对名称、时间窗口（分钟）、涨跌幅阈值（%）
+# 每个监控项独立设置：交易对名称、市场类型、价格来源、时间窗口（分钟）、涨跌幅阈值（%）
 symbols:
-  - symbol: BTCUSDT       # 交易对名称（币安格式）
-    window_minutes: 15     # 监控 15 分钟内的价格变化
-    threshold_pct: 2.0     # 涨跌幅 >= 2% 触发告警
+  - symbol: BTCUSDT
+    market: spot
+    price_source: last
+    window_minutes: 15
+    threshold_pct: 2.0
 
   - symbol: ETHUSDT
+    market: spot
+    price_source: last
     window_minutes: 5
     threshold_pct: 3.0
+
+  - symbol: BTCUSDT
+    market: usdm_perp
+    price_source: mark
+    window_minutes: 5
+    threshold_pct: 1.5
 
   - symbol: SOLUSDT
-    window_minutes: 5
-    threshold_pct: 5.0
-
-  - symbol: BNBUSDT
+    market: usdm_perp
+    price_source: mark
     window_minutes: 10
-    threshold_pct: 3.0
+    threshold_pct: 2.5
 
 # ==================== 轮询设置 ====================
 monitor:
@@ -92,7 +101,7 @@ monitor:
 
 # ==================== 告警设置 ====================
 alert:
-  cooldown_minutes: 10        # 同一交易对触发告警后，10 分钟内不再重复告警
+  cooldown_minutes: 10        # 同一监控项触发告警后，10 分钟内不再重复告警
 
 # ==================== 飞书 Webhook ====================
 feishu:
@@ -102,6 +111,7 @@ feishu:
 # ==================== 币安 API ====================
 binance:
   base_url: "https://api.binance.com"
+  usdm_base_url: "https://fapi.binance.com"
   timeout_seconds: 10         # 单次请求超时时间
 
 # ==================== HTTP 代理 ====================
@@ -117,16 +127,24 @@ proxy:
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `symbol` | string | 是 | 币安交易对名称，如 `BTCUSDT`、`ETHUSDT` |
+| `market` | string | 否 | 市场类型：`spot` 或 `usdm_perp`，默认 `spot` |
+| `price_source` | string | 否 | 价格来源：`spot` 仅支持 `last`，`usdm_perp` 仅支持 `mark` |
 | `window_minutes` | int | 否 | 监控时间窗口（分钟），默认 5 |
 | `threshold_pct` | float | 否 | 涨跌幅阈值（%），默认 3.0 |
 
 **配置示例理解：**
 ```yaml
 - symbol: BTCUSDT
+  market: usdm_perp
+  price_source: mark
   window_minutes: 15
   threshold_pct: 2.0
 ```
-含义：监控 BTC/USDT 交易对，当 **15 分钟** 内涨跌幅 **>= 2%** 时发送飞书告警。
+含义：监控 BTCUSDT 的 **USDⓈ-M 永续 mark price**，当 **15 分钟** 内涨跌幅 **>= 2%** 时发送飞书告警。
+
+**兼容说明：**
+- 如果不填写 `market`，默认按 `spot` 处理
+- 如果不填写 `price_source`，`spot` 默认 `last`，`usdm_perp` 默认 `mark`
 
 #### 常用交易对参考
 
@@ -168,10 +186,10 @@ cd D:/github/crypto-price-alert
 **正常启动日志示例：**
 ```
 level=INFO msg="config loaded" symbols=4 poll_interval=30
-level=INFO msg=monitoring symbol=BTCUSDT window=15 threshold=2
-level=INFO msg=monitoring symbol=ETHUSDT window=5 threshold=3
-level=INFO msg=monitoring symbol=SOLUSDT window=5 threshold=5
-level=INFO msg=monitoring symbol=BNBUSDT window=10 threshold=3
+level=INFO msg=monitoring symbol=BTCUSDT market=spot price_source=last window=15 threshold=2
+level=INFO msg=monitoring symbol=ETHUSDT market=spot price_source=last window=5 threshold=3
+level=INFO msg=monitoring symbol=BTCUSDT market=usdm_perp price_source=mark window=5 threshold=1.5
+level=INFO msg=monitoring symbol=SOLUSDT market=usdm_perp price_source=mark window=10 threshold=2.5
 level=INFO msg="monitor started" symbols=4 poll_interval=30s cooldown=10m0s
 level=DEBUG msg="price check" symbol=BTCUSDT window=15 open=71712.5 close=71749.59 change_pct=0.05
 ```
@@ -291,6 +309,8 @@ level=ERROR msg="fetch klines failed" ... error="context deadline exceeded"
 ```yaml
 symbols:
   - symbol: BTCUSDT
+    market: usdm_perp
+    price_source: mark
     window_minutes: 15
     threshold_pct: 0.01    # 临时改小，几乎一定会触发
 ```
@@ -322,12 +342,13 @@ D:\github\crypto-price-alert\
 ├── crypto-price-alert.exe       # 编译产物
 ├── config.yaml                  # 运行配置（含敏感信息，不提交 git）
 ├── config.example.yaml          # 配置模板
+├── docs/superpowers/specs/      # 设计文档
 ├── .gitignore
 ├── go.mod / go.sum              # Go 依赖管理
 ├── main.go                      # 程序入口
 └── internal/
     ├── config/config.go         # 配置解��与校验
-    ├── binance/client.go        # 币安 K 线 API 客户端
+    ├── binance/client.go        # 币安现货 / 永续 Mark Price API 客户端
     ├── price/tracker.go         # 价格滑动窗口与变化检测
     ├── alert/
     │   ├── feishu.go            # 飞书卡片构建与发送
@@ -345,7 +366,7 @@ D:\github\crypto-price-alert\
 3. [ ] cp config.example.yaml config.yaml
 4. [ ] 编辑 config.yaml：
        - 填写飞书 Webhook URL
-       - 配置需要监控的交易对和阈值
+       - 配置需要监控的交易对、市场类型和阈值
        - 配置 HTTP 代理（国内网络必须）
 5. [ ] GOPROXY=https://goproxy.cn,direct go mod tidy
 6. [ ] go build -o crypto-price-alert.exe .
