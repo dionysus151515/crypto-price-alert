@@ -1,32 +1,48 @@
-# 每个交易对独立配置：时间窗口（分钟）和涨跌幅阈值（%）
+# 每个监控项独立配置：市场类型、价格来源、时间窗口（分钟）和涨跌幅阈值（%）
 symbols:
   - symbol: BTCUSDT
+    market: spot
+    price_source: last
     window_minutes: 15
     threshold_pct: 2.0
+
   - symbol: ETHUSDT
+    market: spot
+    price_source: last
     window_minutes: 5
     threshold_pct: 3.0
+
+  - symbol: BTCUSDT
+    market: usdm_perp
+    price_source: mark
+    window_minutes: 5
+    threshold_pct: 1.5
+
   - symbol: SOLUSDT
-    window_minutes: 5
-    threshold_pct: 5.0
-  - symbol: BNBUSDT
+    market: usdm_perp
+    price_source: mark
     window_minutes: 10
-    threshold_pct: 3.0
+    threshold_pct: 2.5
 
 # 全局监控设置
 monitor:
-  poll_interval_seconds: 30   # 轮询间隔（秒）
+  poll_interval_seconds: 30
 
 # 告警设置
 alert:
-  cooldown_minutes: 10        # 同一交易对告警冷却时间（分钟）
+  cooldown_minutes: 10
 
 # 飞书机器人 Webhook
 feishu:
   webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-id-here"
-  secret: ""                  # 可选：签名密钥，留空则不签名
+  secret: ""
 
-# 币安 API（可选覆盖）
+# Binance API（可覆盖默认值）
 binance:
   base_url: "https://api.binance.com"
+  usdm_base_url: "https://fapi.binance.com"
   timeout_seconds: 10
+
+# HTTP 代理（可选）
+proxy:
+  http: ""

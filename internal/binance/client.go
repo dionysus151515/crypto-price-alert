@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL     string
+	usdmBaseURL string
+	httpClient  *http.Client
 }
 
 type Kline struct {
@@ -25,20 +27,40 @@ type Kline struct {
 	CloseTime time.Time
 }
 
-func NewClient(baseURL string, timeoutSeconds int, proxyURL string) *Client {
+func NewClient(baseURL, usdmBaseURL string, timeoutSeconds int, proxyURL string) *Client {
 	transport := &http.Transport{}
 	if proxyURL != "" {
-		if u, err := url.Parse(proxyURL); err == nil {
+		if u, err := parseProxyURL(proxyURL); err == nil {
 			transport.Proxy = http.ProxyURL(u)
 		}
 	}
 	return &Client{
-		baseURL: baseURL,
+		baseURL:     baseURL,
+		usdmBaseURL: usdmBaseURL,
 		httpClient: &http.Client{
 			Timeout:   time.Duration(timeoutSeconds) * time.Second,
 			Transport: transport,
 		},
 	}
+}
+
+func parseProxyURL(raw string) (*url.URL, error) {
+	proxyURL := strings.TrimSpace(raw)
+	if proxyURL == "" {
+		return nil, fmt.Errorf("empty proxy url")
+	}
+	if !strings.Contains(proxyURL, "://") {
+		proxyURL = "http://" + proxyURL
+	}
+
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("invalid proxy url: %s", raw)
+	}
+	return u, nil
 }
 
 // WindowToIntervalAndLimit maps a window in minutes to a Binance kline interval and limit.
@@ -69,10 +91,23 @@ func WindowToIntervalAndLimit(windowMinutes int) (interval string, limit int) {
 	return "1m", windowMinutes + 1
 }
 
-// FetchKlines retrieves kline/candlestick data from Binance.
-func (c *Client) FetchKlines(symbol, interval string, limit int) ([]Kline, error) {
+// FetchSpotKlines retrieves spot kline/candlestick data from Binance.
+func (c *Client) FetchSpotKlines(symbol, interval string, limit int) ([]Kline, error) {
 	url := fmt.Sprintf("%s/api/v3/klines?symbol=%s&interval=%s&limit=%d",
 		c.baseURL, symbol, interval, limit)
+
+	return c.fetchKlines(url)
+}
+
+// FetchUSDMMarkPriceKlines retrieves USDⓈ-M futures mark price kline/candlestick data from Binance.
+func (c *Client) FetchUSDMMarkPriceKlines(symbol, interval string, limit int) ([]Kline, error) {
+	url := fmt.Sprintf("%s/fapi/v1/markPriceKlines?symbol=%s&interval=%s&limit=%d",
+		c.usdmBaseURL, symbol, interval, limit)
+
+	return c.fetchKlines(url)
+}
+
+func (c *Client) fetchKlines(url string) ([]Kline, error) {
 
 	resp, err := c.httpClient.Get(url)
 	if err != nil {

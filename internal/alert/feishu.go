@@ -83,14 +83,18 @@ func (f *FeishuClient) buildCard(c price.PriceChange, thresholdPct float64) map[
 		template = "red"
 	}
 
-	title := fmt.Sprintf("Price Alert: %s %s%.2f%% (%dmin)",
-		c.Symbol, c.Direction(), c.ChangePct, c.WindowMin)
+	title := fmt.Sprintf("Price Alert: %s [%s] %s%.2f%% (%dmin)",
+		c.Symbol, c.TitleLabel, c.Direction(), c.ChangePct, c.WindowMin)
 
-	tradingPair := buildTradingPairURL(c.Symbol)
+	buttonText := "查看 Binance"
+	if c.Market == "usdm_perp" {
+		buttonText = "查看 Binance Futures"
+	}
 
 	content := fmt.Sprintf(
-		"**交易对:** %s\n**涨跌幅:** %s%.2f%%（%d 分钟）\n**当前价:** $%s\n**窗口起始价:** $%s\n**时间:** %s\n**阈值:** ≥%.1f%%",
+		"**交易对** %s\n**市场** %s\n**涨跌幅** %s%.2f%%（%d 分钟）\n**当前价格** $%s\n**窗口起始价格** $%s\n**时间** %s\n**阈值** ≥ %.1f%%",
 		c.Symbol,
+		c.MarketLabel,
 		c.Direction(), c.ChangePct, c.WindowMin,
 		formatPrice(c.CurrentPrice),
 		formatPrice(c.OldPrice),
@@ -122,10 +126,10 @@ func (f *FeishuClient) buildCard(c price.PriceChange, thresholdPct float64) map[
 						"tag": "button",
 						"text": map[string]interface{}{
 							"tag":     "plain_text",
-							"content": "查看 Binance",
+							"content": buttonText,
 						},
 						"type": "primary",
-						"url":  fmt.Sprintf("https://www.binance.com/en/trade/%s", tradingPair),
+						"url":  buildTradingURL(c),
 					},
 				},
 			},
@@ -143,6 +147,15 @@ func buildTradingPairURL(symbol string) string {
 		}
 	}
 	return symbol
+}
+
+func buildTradingURL(c price.PriceChange) string {
+	if c.Market == "usdm_perp" {
+		return fmt.Sprintf("https://www.binance.com/en/futures/%s", c.Symbol)
+	}
+
+	tradingPair := buildTradingPairURL(c.Symbol)
+	return fmt.Sprintf("https://www.binance.com/en/trade/%s", tradingPair)
 }
 
 func formatPrice(p float64) string {

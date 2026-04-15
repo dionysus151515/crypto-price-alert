@@ -14,6 +14,10 @@ type PricePoint struct {
 
 type PriceChange struct {
 	Symbol       string
+	Market       string
+	PriceSource  string
+	MarketLabel  string
+	TitleLabel   string
 	CurrentPrice float64
 	OldPrice     float64
 	ChangePct    float64
@@ -29,8 +33,8 @@ func (pc PriceChange) Direction() string {
 }
 
 func (pc PriceChange) String() string {
-	return fmt.Sprintf("%s %s%.2f%% (%dmin) $%.4f -> $%.4f",
-		pc.Symbol, pc.Direction(), pc.ChangePct, pc.WindowMin, pc.OldPrice, pc.CurrentPrice)
+	return fmt.Sprintf("%s [%s] %s%.2f%% (%dmin) $%.4f -> $%.4f",
+		pc.Symbol, pc.TitleLabel, pc.Direction(), pc.ChangePct, pc.WindowMin, pc.OldPrice, pc.CurrentPrice)
 }
 
 type Tracker struct {

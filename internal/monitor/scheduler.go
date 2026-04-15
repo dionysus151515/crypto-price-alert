@@ -22,7 +22,7 @@ type Monitor struct {
 func New(cfg *config.Config) *Monitor {
 	return &Monitor{
 		cfg:     cfg,
-		client:  binance.NewClient(cfg.Binance.BaseURL, cfg.Binance.TimeoutSeconds, cfg.Proxy.HTTP),
+		client:  binance.NewClient(cfg.Binance.BaseURL, cfg.Binance.USDMBaseURL, cfg.Binance.TimeoutSeconds, cfg.Proxy.HTTP),
 		tracker: price.NewTracker(),
 		dedup:   alert.NewDeduplicator(),
 		feishu:  alert.NewFeishuClient(cfg.Feishu.WebhookURL, cfg.Feishu.Secret),
@@ -64,8 +64,9 @@ func (m *Monitor) pollAll(cooldown time.Duration) {
 
 func (m *Monitor) pollSymbol(sym config.SymbolConfig, cooldown time.Duration) {
 	interval, limit := binance.WindowToIntervalAndLimit(sym.WindowMinutes)
+	identity := sym.Identity()
 
-	klines, err := m.client.FetchKlines(sym.Symbol, interval, limit)
+	klines, err := m.fetchSeries(sym, interval, limit)
 	if err != nil {
 		slog.Error("fetch klines failed", "symbol", sym.Symbol, "error", err)
 		return
@@ -79,7 +80,7 @@ func (m *Monitor) pollSymbol(sym config.SymbolConfig, cooldown time.Duration) {
 	// Record the latest close price in the tracker
 	latest := klines[len(klines)-1]
 	now := time.Now()
-	m.tracker.Record(sym.Symbol, latest.Close, now, sym.WindowMinutes)
+	m.tracker.Record(identity, latest.Close, now, sym.WindowMinutes)
 
 	// Compute change from klines: first candle open vs last candle close
 	if len(klines) >= 2 {
@@ -99,6 +100,10 @@ func (m *Monitor) pollSymbol(sym config.SymbolConfig, cooldown time.Duration) {
 
 			change := price.PriceChange{
 				Symbol:       sym.Symbol,
+				Market:       sym.Market,
+				PriceSource:  sym.PriceSource,
+				MarketLabel:  sym.MarketLabel(),
+				TitleLabel:   sym.MarketTitleLabel(),
 				CurrentPrice: last.Close,
 				OldPrice:     first.Open,
 				ChangePct:    changePct,
@@ -107,18 +112,27 @@ func (m *Monitor) pollSymbol(sym config.SymbolConfig, cooldown time.Duration) {
 			}
 
 			if abs(changePct) >= sym.ThresholdPct {
-				if m.dedup.ShouldAlert(sym.Symbol, cooldown) {
+				if m.dedup.ShouldAlert(identity, cooldown) {
 					slog.Info("threshold triggered", "change", change.String())
 					if err := m.feishu.SendAlertWithThreshold(change, sym.ThresholdPct); err != nil {
 						slog.Error("send alert failed", "symbol", sym.Symbol, "error", err)
 					} else {
-						m.dedup.MarkAlerted(sym.Symbol)
+						m.dedup.MarkAlerted(identity)
 					}
 				} else {
-					slog.Debug("alert suppressed by cooldown", "symbol", sym.Symbol)
+					slog.Debug("alert suppressed by cooldown", "symbol", sym.Symbol, "identity", identity)
 				}
 			}
 		}
+	}
+}
+
+func (m *Monitor) fetchSeries(sym config.SymbolConfig, interval string, limit int) ([]binance.Kline, error) {
+	switch sym.Market {
+	case "usdm_perp":
+		return m.client.FetchUSDMMarkPriceKlines(sym.Symbol, interval, limit)
+	default:
+		return m.client.FetchSpotKlines(sym.Symbol, interval, limit)
 	}
 }
 

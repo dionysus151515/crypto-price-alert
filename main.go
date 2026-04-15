@@ -38,6 +38,8 @@ func main() {
 	for _, s := range cfg.Symbols {
 		slog.Info("monitoring",
 			"symbol", s.Symbol,
+			"market", s.Market,
+			"price_source", s.PriceSource,
 			"window", s.WindowMinutes,
 			"threshold", s.ThresholdPct,
 		)
